@@ -1,9 +1,14 @@
 .streamlit/secrets.toml
+01design/
+project.md
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+README.md
 
 # C extensions
 *.so
@@ -124,7 +129,6 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
 .venv
 env/
 venv/

@@ -1,1 +1,12 @@
-streamlit
+requests==2.31.0
+pandas==2.1.4
+numpy==1.24.3
+python-dotenv==1.0.0
+fastapi
+uvicorn[standard]
+pydantic
+supabase
+python-multipart
+fastapi-cors
+plotly
+cos-python-sdk-v5
