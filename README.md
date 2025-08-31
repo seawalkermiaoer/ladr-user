@@ -16,24 +16,16 @@
 pip install -r requirements.txt
 ```
 
-### 配置环境
-创建 `.streamlit/secrets.toml` 文件：
-```toml
-[supabase]
-url = "your-supabase-url"
-key = "your-supabase-key"
-
-[oss]
-secret_id = "your-cos-secret-id"
-secret_key = "your-cos-secret-key"
-region = "ap-beijing"
-bucket_name = "your-bucket-name"
-```
-
 ### 启动应用
 ```bash
 streamlit run streamlit_app.py
 ```
+
+### 🔐 认证功能
+- 使用 `streamlit-authenticator` 库实现用户认证
+- 支持 **Cookie 持久化登录**，刷新页面后登录状态保持
+- Cookie 有效期：30天
+- 安全的密码哈希存储
 
 ## 🛠️ 技术栈
 

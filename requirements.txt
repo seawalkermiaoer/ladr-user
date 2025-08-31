@@ -10,3 +10,4 @@ python-multipart
 fastapi-cors
 plotly
 cos-python-sdk-v5
+streamlit-authenticator
