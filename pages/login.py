@@ -42,7 +42,9 @@ def show_login_page():
                     if username == default_username and password == default_password:
                         st.session_state.logged_in = True
                         st.session_state.username = username
-                        st.session_state.user_id = 1  # 默认 user_id 为 1
+                        st.session_state.user_id = 1
+                        st.session_state.student_id = 1  # 默认 user_id 为 1
+                        
                         st.success("登录成功！正在跳转...")
                         st.rerun()
                     else:

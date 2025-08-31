@@ -168,12 +168,24 @@ if not st.session_state.get("logged_in", False):
     st.info("💡 请返回首页进行登录")
     st.stop()
 
-# 获取所有试卷数据
-all_exam_papers = get_exam_papers()
+# 获取当前学生信息
+if 'selected_student' not in st.session_state:
+    st.session_state.selected_student = {
+        'id': 1,
+        'name': '默认学生',
+        'user_id': 1
+    }
 
-if not all_exam_papers:
-    st.warning("⚠️ 暂无试卷数据")
-    st.info("💡 系统中暂无可用试卷")
+current_student = st.session_state.selected_student
+st.info(f"🎯 当前学生: **{current_student['name']}** (ID: {current_student['id']})")
+
+# 获取所有试卷数据并按学生ID筛选
+all_exam_papers = get_exam_papers()
+student_exam_papers = [paper for paper in all_exam_papers if paper.get('student_id') == current_student['id']]
+
+if not student_exam_papers:
+    st.warning("⚠️ 该学生暂无试卷数据")
+    st.info("💡 该学生还没有创建任何试卷")
     st.stop()
 
 # 试卷筛选功能
@@ -187,10 +199,10 @@ search_term = st.text_input(
 )
 
 # 根据搜索条件筛选试卷
-filtered_papers = all_exam_papers
+filtered_papers = student_exam_papers
 if search_term:
     filtered_papers = [
-        paper for paper in all_exam_papers 
+        paper for paper in student_exam_papers 
         if search_term.lower() in paper.get('title', '').lower()
     ]
 

@@ -1,6 +1,7 @@
 .streamlit/secrets.toml
 01design/
 project.md
+schema.md 
 
 
 # Byte-compiled / optimized / DLL files

@@ -60,11 +60,23 @@ else:
         
         # 获取当前学生的试卷数量
         all_exam_papers = get_exam_papers()
-        student_papers = [paper for paper in all_exam_papers if paper.get('user_id') == selected['user_id']]
+        student_papers = [paper for paper in all_exam_papers if paper.get('student_id') == selected['id']]
         paper_count = len(student_papers)
         
         st.info(f"**{selected['name']}** (ID: {selected['id']})")
         st.metric("📚 试卷数量", paper_count)
+        
+        # 调试信息（可选显示）
+        if st.checkbox("显示调试信息", key="debug_info"):
+            st.write(f"总试卷数: {len(all_exam_papers)}")
+            st.write(f"当前学生ID: {selected['id']}")
+            if all_exam_papers:
+                st.write("试卷数据示例:")
+                st.json(all_exam_papers[0] if all_exam_papers else {})
+            st.write(f"匹配的试卷: {len(student_papers)}")
+            if student_papers:
+                st.write("匹配试卷示例:")
+                st.json(student_papers[0])
     
     # 定义页面
     exam_paper_detail_page = st.Page(
