@@ -6,7 +6,7 @@ import sys
 
 # 添加当前目录到路径以导入模块
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from api_service import make_api_request
+from api_service import make_api_request, api_service
 from pages.login import show_login_page, check_login, show_logout_button
 
 # 使用 Streamlit secrets 获取 Supabase 配置
@@ -27,16 +27,56 @@ st.set_page_config(
 
 # 获取数据的辅助函数
 @st.cache_data(ttl=30)
-def get_questions() -> List[Dict]:
-    """获取题目列表"""
-    result = make_api_request("GET", "questions")
-    return result["data"] if result["success"] else []
+def get_questions_by_student_id(student_id: int) -> List[Dict[str, Any]]:
+    """根据学生ID获取题目列表
+    
+    Args:
+        student_id (int): 学生ID
+        
+    Returns:
+        List[Dict[str, Any]]: 题目列表，如果出错则返回空列表
+    """
+    try:
+        # 通过学生试卷获取相关题目，提升性能
+        student_papers = api_service.get_exam_papers_by_student_id(student_id)
+        if not student_papers:
+            return []
+        
+        # 获取所有相关题目ID
+        question_ids = set()
+        for paper in student_papers:
+            if 'questions' in paper and paper['questions']:
+                question_ids.update(paper['questions'])
+        
+        # 如果没有题目ID，返回空列表
+        if not question_ids:
+            return []
+            
+        # 获取所有题目并筛选
+        result = make_api_request("GET", "questions")
+        if result["success"] and result["data"]:
+            return [q for q in result["data"] if q.get('id') in question_ids]
+        return []
+        
+    except Exception as e:
+        st.error(f"获取学生题目数据时出错: {str(e)}")
+        return []
 
 @st.cache_data(ttl=30)
-def get_exam_papers() -> List[Dict]:
-    """获取试卷列表"""
-    result = make_api_request("GET", "exam_papers")
-    return result["data"] if result["success"] else []
+def get_exam_papers_by_student_id(student_id: int) -> List[Dict[str, Any]]:
+    """根据学生ID获取试卷列表
+    
+    Args:
+        student_id (int): 学生ID
+        
+    Returns:
+        List[Dict[str, Any]]: 试卷列表，如果出错则返回空列表
+    """
+    try:
+        return api_service.get_exam_papers_by_student_id(student_id)
+    except Exception as e:
+        st.error(f"获取学生试卷数据时出错: {str(e)}")
+        return []
 
 # 主应用逻辑
 if not check_login():
@@ -58,25 +98,20 @@ else:
         st.markdown("### 👤 当前学生")
         selected = st.session_state.selected_student
         
-        # 获取当前学生的试卷数量
-        all_exam_papers = get_exam_papers()
-        student_papers = [paper for paper in all_exam_papers if paper.get('student_id') == selected['id']]
-        paper_count = len(student_papers)
-        
-        st.info(f"**{selected['name']}** (ID: {selected['id']})")
-        st.metric("📚 试卷数量", paper_count)
-        
-        # 调试信息（可选显示）
-        if st.checkbox("显示调试信息", key="debug_info"):
-            st.write(f"总试卷数: {len(all_exam_papers)}")
-            st.write(f"当前学生ID: {selected['id']}")
-            if all_exam_papers:
-                st.write("试卷数据示例:")
-                st.json(all_exam_papers[0] if all_exam_papers else {})
-            st.write(f"匹配的试卷: {len(student_papers)}")
-            if student_papers:
-                st.write("匹配试卷示例:")
-                st.json(student_papers[0])
+        # 获取当前学生的试卷数量（优化版本，包含错误处理）
+        try:
+            student_papers = get_exam_papers_by_student_id(selected['id'])
+            paper_count = len(student_papers) if student_papers else 0
+            
+            # 显示学生基本信息
+            st.info(f"**{selected['name']}** (ID: {selected['id']})")
+            st.metric("📚 试卷数量", paper_count)
+                        
+        except Exception as e:
+            st.error(f"加载学生信息时出错: {str(e)}")
+            # 提供默认显示
+            st.info(f"**{selected['name']}** (ID: {selected['id']})")
+            st.metric("📚 试卷数量", "--")
     
     # 定义页面
     exam_paper_detail_page = st.Page(

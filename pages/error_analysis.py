@@ -10,7 +10,7 @@ from collections import Counter, defaultdict
 
 # 添加父目录到路径以导入api_service
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from api_service import make_api_request
+from api_service import make_api_request, api_service
 
 # 内联学生选择相关函数
 def get_selected_student() -> Dict[str, Any]:
@@ -44,16 +44,38 @@ def get_students() -> List[Dict]:
     return result["data"] if result["success"] else []
 
 @st.cache_data(ttl=30)
-def get_exam_papers() -> List[Dict]:
-    """获取试卷列表"""
-    result = make_api_request("GET", "exam_papers")
-    return result["data"] if result["success"] else []
+def get_exam_papers_by_student_id(student_id: int) -> List[Dict[str, Any]]:
+    """根据学生ID获取试卷列表
+    
+    Args:
+        student_id (int): 学生ID
+        
+    Returns:
+        List[Dict[str, Any]]: 试卷列表，如果出错则返回空列表
+    """
+    try:
+        return api_service.get_exam_papers_by_student_id(student_id)
+    except Exception as e:
+        st.error(f"获取学生试卷数据时出错: {str(e)}")
+        return []
 
 @st.cache_data(ttl=30)
-def get_questions() -> List[Dict]:
-    """获取题目列表"""
-    result = make_api_request("GET", "questions")
-    return result["data"] if result["success"] else []
+def get_questions_by_student_id(student_id: int) -> List[Dict[str, Any]]:
+    """根据学生ID获取题目列表
+    
+    Args:
+        student_id (int): 学生ID
+        
+    Returns:
+        List[Dict[str, Any]]: 题目列表，如果出错则返回空列表
+    """
+    try:
+        # 直接使用api_service的get_questions_by_student_id函数
+        return api_service.get_questions_by_student_id(student_id)
+        
+    except Exception as e:
+        st.error(f"获取学生题目数据时出错: {str(e)}")
+        return []
 
 @st.cache_data(ttl=30)
 def get_exam_paper_images() -> List[Dict]:
@@ -91,11 +113,22 @@ def calculate_error_rate(student_id: int, exam_paper_id: int, questions: List[Di
 
 def calculate_trend_analysis(student_id: int, start_date: str, end_date: str, 
                            exam_papers: List[Dict], questions: List[Dict]) -> Dict:
-    """计算指定时间范围内的错题趋势分析"""
-    # 过滤时间范围内的试卷
+    """计算指定时间范围内的错题趋势分析
+    
+    Args:
+        student_id (int): 学生ID（用于验证）
+        start_date (str): 开始日期
+        end_date (str): 结束日期
+        exam_papers (List[Dict]): 已筛选的学生试卷列表
+        questions (List[Dict]): 已筛选的学生题目列表
+        
+    Returns:
+        Dict: 趋势分析结果
+    """
+    # 过滤时间范围内的试卷（数据已按学生筛选，无需再次筛选student_id）
     filtered_papers = []
     for paper in exam_papers:
-        if paper.get('student_id') == student_id and paper.get('created_time'):
+        if paper.get('created_time'):
             try:
                 # 解析试卷创建时间
                 paper_date = datetime.fromisoformat(paper['created_time'].replace('Z', '+00:00'))
@@ -156,30 +189,22 @@ def main():
     
     st.markdown("---")
     
-    # 获取数据
+    # 获取当前学生ID
+    selected_student_id = get_selected_student_id()
+    
+    # 获取数据（基于学生ID优化性能）
     students = get_students()
-    exam_papers = get_exam_papers()
-    questions = get_questions()
+    filtered_exam_papers = get_exam_papers_by_student_id(selected_student_id)
+    filtered_questions = get_questions_by_student_id(selected_student_id)
     exam_paper_images = get_exam_paper_images()
     
     if not students:
         st.error("无法获取学生数据")
         return
     
-    if not exam_papers:
-        st.error("无法获取试卷数据")
+    if not filtered_exam_papers:
+        st.warning("该学生暂无试卷数据")
         return
-    
-    # 根据选中的学生筛选数据
-    if is_student_selected():
-        selected_student_id = get_selected_student_id()
-        # 筛选该学生的试卷
-        filtered_exam_papers = [ep for ep in exam_papers if ep.get('student_id') == selected_student_id]
-        # 筛选该学生的题目
-        filtered_questions = [q for q in questions if q.get('student_id') == selected_student_id]
-    else:
-        filtered_exam_papers = exam_papers
-        filtered_questions = questions
     
     # 创建选项卡
     tab1, tab2 = st.tabs(["📋 单卷错题分析", "📈 错题趋势分析"])
@@ -189,37 +214,22 @@ def main():
         col1, col2 = st.columns(2)
     
         with col1:
-            # 学生选择
-            if is_student_selected():
-                selected_student = get_selected_student()
-                st.info(f"已选择学生: **{selected_student['name']}**")
-                selected_student_id = selected_student['id']
-            else:
-                student_options = {f"{s['name']} (ID: {s['id']})": s['id'] for s in students}
-                selected_student_display = st.selectbox(
-                    "选择学生",
-                    options=list(student_options.keys()),
-                    key="error_analysis_student_select"
-                )
-                selected_student_id = student_options[selected_student_display] if selected_student_display else None
+            # 显示当前学生信息
+            selected_student = get_selected_student()
+            st.info(f"当前学生: **{selected_student['name']}** (ID: {selected_student['id']})")
         
         with col2:
-            # 试卷选择 - 根据选中的学生筛选试卷
-            if selected_student_id:
-                student_exam_papers = [ep for ep in filtered_exam_papers if ep.get('student_id') == selected_student_id]
-                if student_exam_papers:
-                    exam_paper_options = {f"{ep['title']} (ID: {ep['id']})": ep['id'] for ep in student_exam_papers}
-                    selected_exam_paper_display = st.selectbox(
-                        "选择试卷",
-                        options=list(exam_paper_options.keys()),
-                        key="error_analysis_exam_paper_select"
-                    )
-                    selected_exam_paper_id = exam_paper_options[selected_exam_paper_display] if selected_exam_paper_display else None
-                else:
-                    st.warning("该学生暂无试卷数据")
-                    selected_exam_paper_id = None
+            # 试卷选择 - 显示当前学生的试卷
+            if filtered_exam_papers:
+                exam_paper_options = {f"{ep['title']} (ID: {ep['id']})": ep['id'] for ep in filtered_exam_papers}
+                selected_exam_paper_display = st.selectbox(
+                    "选择试卷",
+                    options=list(exam_paper_options.keys()),
+                    key="error_analysis_exam_paper_select"
+                )
+                selected_exam_paper_id = exam_paper_options[selected_exam_paper_display] if selected_exam_paper_display else None
             else:
-                st.info("请先选择学生")
+                st.warning("该学生暂无试卷数据")
                 selected_exam_paper_id = None
     
         if selected_student_id and selected_exam_paper_id:
@@ -299,19 +309,10 @@ def main():
     with tab2:
         st.header("📈 错题趋势分析")
         
-        # 学生选择
-        if is_student_selected():
-            selected_student = get_selected_student()
-            st.info(f"已选择学生: **{selected_student['name']}**")
-            selected_student_trend_id = selected_student['id']
-        else:
-            student_options_trend = {f"{s['name']} (ID: {s['id']})": s['id'] for s in students}
-            selected_student_trend = st.selectbox(
-                "选择学生",
-                options=list(student_options_trend.keys()),
-                key="trend_analysis_student_select"
-            )
-            selected_student_trend_id = student_options_trend[selected_student_trend] if selected_student_trend else None
+        # 显示当前学生信息
+        selected_student = get_selected_student()
+        st.info(f"当前学生: **{selected_student['name']}** (ID: {selected_student['id']})")
+        selected_student_trend_id = selected_student['id']
         
         # 时间范围选择
         col1, col2 = st.columns(2)

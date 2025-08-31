@@ -155,6 +155,14 @@ class APIService:
         except Exception as e:
             return []
     
+    def get_exam_papers_by_student_id(self, student_id: int) -> List[Dict[str, Any]]:
+        """根据学生ID获取试卷列表"""
+        try:
+            result = self.db.select_data("exam_paper", filters={"student_id": student_id})
+            return result if result is not None else []
+        except Exception as e:
+            return []
+    
     def get_exam_paper(self, paper_id: int) -> Optional[Dict[str, Any]]:
         """根据ID获取试卷"""
         try:
@@ -280,6 +288,36 @@ class APIService:
         """获取所有题目"""
         try:
             result = self.db.select_data("question")
+            return result if result is not None else []
+        except Exception as e:
+            return []
+    
+    def get_questions_by_exam_paper_id(self, exam_paper_id: int) -> List[Dict[str, Any]]:
+        """根据试卷ID获取题目列表
+        
+        Args:
+            exam_paper_id (int): 试卷ID
+            
+        Returns:
+            List[Dict[str, Any]]: 题目列表，如果出错则返回空列表
+        """
+        try:
+            result = self.db.select_data("question", filters={"exam_paper_id": exam_paper_id})
+            return result if result is not None else []
+        except Exception as e:
+            return []
+    
+    def get_questions_by_student_id(self, student_id: int) -> List[Dict[str, Any]]:
+        """根据学生ID获取题目列表
+        
+        Args:
+            student_id (int): 学生ID
+            
+        Returns:
+            List[Dict[str, Any]]: 题目列表，如果出错则返回空列表
+        """
+        try:
+            result = self.db.select_data("question", filters={"student_id": student_id})
             return result if result is not None else []
         except Exception as e:
             return []

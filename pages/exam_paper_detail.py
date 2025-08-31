@@ -6,16 +6,10 @@ import sys
 
 # 添加父目录到路径以导入api_service
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from api_service import make_api_request
+from api_service import make_api_request, api_service
 from cos_uploader import ExamPaperCOSManager
 
 # 获取数据的辅助函数
-@st.cache_data(ttl=30)
-def get_exam_papers() -> List[Dict]:
-    """获取试卷列表"""
-    result = make_api_request("GET", "exam_papers")
-    return result["data"] if result["success"] else []
-
 @st.cache_data(ttl=30)
 def get_exam_paper_images() -> List[Dict]:
     """获取试卷图片列表"""
@@ -23,21 +17,67 @@ def get_exam_paper_images() -> List[Dict]:
     return result["data"] if result["success"] else []
 
 @st.cache_data(ttl=30)
-def get_questions() -> List[Dict]:
-    """获取题目列表"""
-    result = make_api_request("GET", "questions")
-    return result["data"] if result["success"] else []
+def get_exam_papers_by_student_id(student_id: int) -> List[Dict[str, Any]]:
+    """根据学生ID获取试卷列表
+    
+    Args:
+        student_id (int): 学生ID
+        
+    Returns:
+        List[Dict[str, Any]]: 试卷列表，如果出错则返回空列表
+    """
+    try:
+        return api_service.get_exam_papers_by_student_id(student_id)
+    except Exception as e:
+        st.error(f"获取学生试卷数据时出错: {str(e)}")
+        return []
+
+@st.cache_data(ttl=30)
+def get_questions_by_exam_paper_id(exam_paper_id: int) -> List[Dict[str, Any]]:
+    """根据试卷ID获取题目列表
+    
+    Args:
+        exam_paper_id (int): 试卷ID
+        
+    Returns:
+        List[Dict[str, Any]]: 题目列表，如果出错则返回空列表
+    """
+    try:
+        return api_service.get_questions_by_exam_paper_id(exam_paper_id)
+    except Exception as e:
+        st.error(f"获取试卷题目数据时出错: {str(e)}")
+        return []
+
+@st.cache_data(ttl=30)
+def get_all_exam_papers() -> List[Dict]:
+    """获取所有试卷列表（仅在需要显示所有试卷时使用）
+    
+    Returns:
+        List[Dict]: 所有试卷列表，如果出错则返回空列表
+    """
+    try:
+        result = make_api_request("GET", "exam_papers")
+        return result["data"] if result["success"] else []
+    except Exception as e:
+        st.error(f"获取所有试卷数据时出错: {str(e)}")
+        return []
 
 def show_exam_paper_detail(paper_id: int):
     """显示试卷详情页面"""
-    all_exam_papers = get_exam_papers()
-    all_questions = get_questions()
+    # 获取当前学生ID
+    current_student_id = st.session_state.get('selected_student', {}).get('id', 1)
+    
+    # 优化数据获取：获取当前学生的试卷和试卷图片
+    current_student_papers = get_exam_papers_by_student_id(current_student_id)
     all_exam_paper_images = get_exam_paper_images()
     
+    # 获取当前试卷的题目
+    paper_questions = get_questions_by_exam_paper_id(paper_id)
+    
     # 获取当前试卷信息
-    current_paper = next((p for p in all_exam_papers if p['id'] == paper_id), None)
+    current_paper = next((p for p in current_student_papers if p['id'] == paper_id), None)
     if not current_paper:
-        st.error("试卷不存在")
+        st.error("试卷不存在或不属于当前学生")
         return
     
     # 页面标题
@@ -111,9 +151,6 @@ def show_exam_paper_detail(paper_id: int):
     
     st.markdown("---")
     
-    # 获取试卷相关的题目
-    paper_questions = [q for q in all_questions if q['exam_paper_id'] == paper_id]
-    
     # 计算统计信息
     total_questions = len(paper_questions)
     wrong_questions = [q for q in paper_questions if not q.get('is_correct', True)]
@@ -149,9 +186,19 @@ def show_exam_paper_detail(paper_id: int):
     # 显示题目表格
     questions_df = pd.DataFrame(questions_with_info)
     if not questions_df.empty:
-        columns_order = ['id', 'content', 'status', 'created_time']
+        columns_order = ['id', 'content', 'status', 'remark', 'created_time']
         available_columns = [col for col in columns_order if col in questions_df.columns]
         questions_df = questions_df[available_columns]
+        
+        # 重命名列标题以便更好地显示
+        column_rename = {
+            'id': 'ID',
+            'content': '题目内容',
+            'status': '状态',
+            'remark': '备注',
+            'created_time': '创建时间'
+        }
+        questions_df = questions_df.rename(columns=column_rename)
     
     st.dataframe(questions_df, use_container_width=True)
     
@@ -175,52 +222,32 @@ if 'student_id' not in st.session_state:
 current_student_id = st.session_state.student_id
 st.info(f"🎯 当前登录学生ID: **{current_student_id}**")
 
-# 获取所有试卷数据（扫全表）
-all_exam_papers = get_exam_papers()
-
-if not all_exam_papers:
-    st.warning("⚠️ 系统中暂无试卷数据")
-    st.info("💡 系统中还没有任何试卷")
+# 获取试卷数据
+try:
+    # 获取当前学生的试卷
+    current_student_papers = get_exam_papers_by_student_id(current_student_id)
+    
+    if not current_student_papers:
+        st.warning("⚠️ 您还没有任何试卷")
+        st.info("💡 请先上传试卷")
+        st.stop()
+        
+except Exception as e:
+    st.error(f"获取试卷数据时出错: {str(e)}")
     st.stop()
-
-# 显示试卷统计信息
-total_papers = len(all_exam_papers)
-current_student_papers = [paper for paper in all_exam_papers if paper.get('student_id') == current_student_id]
-current_student_paper_count = len(current_student_papers)
-
-col1, col2 = st.columns(2)
-with col1:
-    st.metric("📚 系统总试卷数", total_papers)
-with col2:
-    st.metric("📝 我的试卷数", current_student_paper_count)
 
 # 试卷筛选功能
 st.subheader("🔍 选择试卷")
 
-# 创建筛选选项
-col1, col2 = st.columns([1, 1])
+# 试卷名称筛选
+search_term = st.text_input(
+    "按试卷名称筛选",
+    placeholder="输入试卷名称进行搜索...",
+    key="paper_search"
+)
 
-with col1:
-    # 学生筛选选项
-    filter_option = st.selectbox(
-        "筛选范围",
-        options=["所有试卷", "仅我的试卷"],
-        key="filter_option"
-    )
-
-with col2:
-    # 试卷名称筛选
-    search_term = st.text_input(
-        "按试卷名称筛选",
-        placeholder="输入试卷名称进行搜索...",
-        key="paper_search"
-    )
-
-# 根据筛选条件筛选试卷
-if filter_option == "仅我的试卷":
-    filtered_papers = current_student_papers
-else:
-    filtered_papers = all_exam_papers
+# 默认显示我的试卷
+filtered_papers = current_student_papers
 
 # 根据搜索条件进一步筛选
 if search_term:
@@ -238,11 +265,8 @@ if not filtered_papers:
 paper_options = []
 for paper in filtered_papers:
     title = paper.get('title', '未命名试卷')
-    student_id = paper.get('student_id', 'N/A')
     paper_id = paper['id']
-    # 标记是否为当前学生的试卷
-    owner_mark = "[我的]" if student_id == current_student_id else f"[学生{student_id}]"
-    option_text = f"{paper_id} - {title} {owner_mark}"
+    option_text = f"{paper_id} - {title}"
     paper_options.append(option_text)
 
 selected_paper_option = st.selectbox(
