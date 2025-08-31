@@ -168,41 +168,64 @@ if not st.session_state.get("logged_in", False):
     st.info("💡 请返回首页进行登录")
     st.stop()
 
-# 获取当前学生信息
-if 'selected_student' not in st.session_state:
-    st.session_state.selected_student = {
-        'id': 1,
-        'name': '默认学生',
-        'user_id': 1
-    }
+# 获取当前登录用户信息
+if 'student_id' not in st.session_state:
+    st.session_state.student_id = 1
 
-current_student = st.session_state.selected_student
-st.info(f"🎯 当前学生: **{current_student['name']}** (ID: {current_student['id']})")
+current_student_id = st.session_state.student_id
+st.info(f"🎯 当前登录学生ID: **{current_student_id}**")
 
-# 获取所有试卷数据并按学生ID筛选
+# 获取所有试卷数据（扫全表）
 all_exam_papers = get_exam_papers()
-student_exam_papers = [paper for paper in all_exam_papers if paper.get('student_id') == current_student['id']]
 
-if not student_exam_papers:
-    st.warning("⚠️ 该学生暂无试卷数据")
-    st.info("💡 该学生还没有创建任何试卷")
+if not all_exam_papers:
+    st.warning("⚠️ 系统中暂无试卷数据")
+    st.info("💡 系统中还没有任何试卷")
     st.stop()
+
+# 显示试卷统计信息
+total_papers = len(all_exam_papers)
+current_student_papers = [paper for paper in all_exam_papers if paper.get('student_id') == current_student_id]
+current_student_paper_count = len(current_student_papers)
+
+col1, col2 = st.columns(2)
+with col1:
+    st.metric("📚 系统总试卷数", total_papers)
+with col2:
+    st.metric("📝 我的试卷数", current_student_paper_count)
 
 # 试卷筛选功能
 st.subheader("🔍 选择试卷")
 
-# 试卷名称筛选
-search_term = st.text_input(
-    "按试卷名称筛选",
-    placeholder="输入试卷名称进行搜索...",
-    key="paper_search"
-)
+# 创建筛选选项
+col1, col2 = st.columns([1, 1])
 
-# 根据搜索条件筛选试卷
-filtered_papers = student_exam_papers
+with col1:
+    # 学生筛选选项
+    filter_option = st.selectbox(
+        "筛选范围",
+        options=["所有试卷", "仅我的试卷"],
+        key="filter_option"
+    )
+
+with col2:
+    # 试卷名称筛选
+    search_term = st.text_input(
+        "按试卷名称筛选",
+        placeholder="输入试卷名称进行搜索...",
+        key="paper_search"
+    )
+
+# 根据筛选条件筛选试卷
+if filter_option == "仅我的试卷":
+    filtered_papers = current_student_papers
+else:
+    filtered_papers = all_exam_papers
+
+# 根据搜索条件进一步筛选
 if search_term:
     filtered_papers = [
-        paper for paper in student_exam_papers 
+        paper for paper in filtered_papers 
         if search_term.lower() in paper.get('title', '').lower()
     ]
 
@@ -212,12 +235,24 @@ if not filtered_papers:
     st.stop()
 
 # 试卷选择下拉框
-paper_options = [f"{paper['id']} - {paper.get('title', '未命名试卷')}" for paper in filtered_papers]
+paper_options = []
+for paper in filtered_papers:
+    title = paper.get('title', '未命名试卷')
+    student_id = paper.get('student_id', 'N/A')
+    paper_id = paper['id']
+    # 标记是否为当前学生的试卷
+    owner_mark = "[我的]" if student_id == current_student_id else f"[学生{student_id}]"
+    option_text = f"{paper_id} - {title} {owner_mark}"
+    paper_options.append(option_text)
+
 selected_paper_option = st.selectbox(
     "选择要查看的试卷",
     options=paper_options,
     key="selected_paper"
 )
+
+# 显示筛选结果统计
+st.caption(f"找到 {len(filtered_papers)} 张试卷")
 
 if selected_paper_option:
     # 从选择的选项中提取试卷ID
